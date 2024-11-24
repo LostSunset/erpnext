@@ -531,7 +531,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 					child: item,
 					args: {
 						doc: me.frm.doc,
-						args: {
+						ctx: {
 							item_code: item.item_code,
 							barcode: item.barcode,
 							serial_no: item.serial_no,
@@ -751,6 +751,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 					child.charge_type = "On Net Total";
 					child.account_head = tax;
 					child.rate = 0;
+					child.set_by_item_tax_template = true;
 				}
 			});
 		}
@@ -1247,8 +1248,8 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 				},
 				callback: function(r) {
 					if(!r.exc) {
-						me.apply_price_list(item, true)
 						frappe.model.set_value(cdt, cdn, 'conversion_factor', r.message.conversion_factor);
+						me.apply_price_list(item, true);
 					}
 				}
 			});
@@ -1381,7 +1382,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		if(child.service_start_date) {
 			frappe.call({
 				"method": "erpnext.stock.get_item_details.calculate_service_end_date",
-				args: {"args": child},
+				args: {ctx: child},
 				callback: function(r) {
 					frappe.model.set_value(cdt, cdn, "service_end_date", r.message.service_end_date);
 				}
@@ -1548,7 +1549,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 			frappe.call({
 				method: "erpnext.stock.get_item_details.get_batch_based_item_price",
 				args: {
-					params: params,
+					pctx: params,
 					item_code: row.item_code,
 				},
 				callback: function(r) {
@@ -1910,7 +1911,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 		me.in_apply_price_list = true;
 		return this.frm.call({
 			method: "erpnext.stock.get_item_details.apply_price_list",
-			args: {	args: args, doc: me.frm.doc },
+			args: {	ctx: args, doc: me.frm.doc },
 			callback: function(r) {
 				if (!r.exc) {
 					frappe.run_serially([
@@ -2076,7 +2077,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 			return this.frm.call({
 				method: "erpnext.stock.get_item_details.get_item_tax_info",
 				args: {
-					company: me.frm.doc.company,
+					doc: me.frm.doc,
 					tax_category: cstr(me.frm.doc.tax_category),
 					item_codes: item_codes,
 					item_rates: item_rates,
@@ -2107,7 +2108,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 			return this.frm.call({
 				method: "erpnext.stock.get_item_details.get_item_tax_map",
 				args: {
-					company: me.frm.doc.company,
+					doc: me.frm.doc,
 					item_tax_template: item.item_tax_template,
 					as_json: true
 				},
@@ -2527,7 +2528,7 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 			frappe.call({
 				method: "erpnext.stock.get_item_details.get_blanket_order_details",
 				args: {
-					args:{
+					ctx:{
 						item_code: item.item_code,
 						customer: doc.customer,
 						supplier: doc.supplier,
