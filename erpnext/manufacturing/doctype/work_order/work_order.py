@@ -178,9 +178,17 @@ class WorkOrder(Document):
 		self.validate_workstation_type()
 		self.reset_use_multi_level_bom()
 
+		if self.source_warehouse:
+			self.set_warehouses()
+
 		validate_uom_is_integer(self, "stock_uom", ["qty", "produced_qty"])
 
 		self.set_required_items(reset_only_qty=len(self.get("required_items")))
+
+	def set_warehouses(self):
+		for row in self.required_items:
+			if not row.source_warehouse:
+				row.source_warehouse = self.source_warehouse
 
 	def reset_use_multi_level_bom(self):
 		if self.is_new():
@@ -1645,6 +1653,7 @@ def create_job_card(work_order, row, enable_capacity_planning=False, auto_create
 			"sequence_id": row.get("sequence_id"),
 			"hour_rate": row.get("hour_rate"),
 			"serial_no": row.get("serial_no"),
+			"time_required": row.get("time_in_mins"),
 			"source_warehouse": row.get("source_warehouse"),
 			"target_warehouse": row.get("fg_warehouse"),
 			"wip_warehouse": work_order.wip_warehouse or row.get("wip_warehouse"),
