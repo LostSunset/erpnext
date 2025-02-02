@@ -406,29 +406,37 @@ def create_json_gz_file(data, doc, file_name=None) -> str:
 	compressed_content = gzip.compress(encoded_content)
 
 	if not file_name:
-		json_filename = f"{scrub(doc.doctype)}-{scrub(doc.name)}.json.gz"
-		_file = frappe.get_doc(
-			{
-				"doctype": "File",
-				"file_name": json_filename,
-				"attached_to_doctype": doc.doctype,
-				"attached_to_name": doc.name,
-				"attached_to_field": "reposting_data_file",
-				"content": compressed_content,
-				"is_private": 1,
-			}
-		)
-		_file.save(ignore_permissions=True)
-
-		return _file.file_url
+		return create_file(doc, compressed_content)
 	else:
 		file_doc = frappe.get_doc("File", file_name)
+		if "/frappe_s3_attachment." in file_doc.file_url:
+			file_doc.delete()
+			return create_file(doc, compressed_content)
+
 		path = file_doc.get_full_path()
 
 		with open(path, "wb") as f:
 			f.write(compressed_content)
 
 		return doc.reposting_data_file
+
+
+def create_file(doc, compressed_content):
+	json_filename = f"{scrub(doc.doctype)}-{scrub(doc.name)}.json.gz"
+	_file = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": json_filename,
+			"attached_to_doctype": doc.doctype,
+			"attached_to_name": doc.name,
+			"attached_to_field": "reposting_data_file",
+			"content": compressed_content,
+			"is_private": 1,
+		}
+	)
+	_file.save(ignore_permissions=True)
+
+	return _file.file_url
 
 
 def get_items_to_be_repost(voucher_type=None, voucher_no=None, doc=None, reposting_data=None):
@@ -1512,7 +1520,7 @@ class update_entries_after:
 							msg, frappe.bold(self.reserved_stock), frappe.bold(allowed_qty)
 						)
 					else:
-						msg = f"{msg} As the full stock is reserved for other sales orders, you're not allowed to consume the stock."
+						msg = f"{msg} As the full stock is reserved for other transactions, you're not allowed to consume the stock."
 
 				msg_list.append(msg)
 
