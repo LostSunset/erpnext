@@ -193,6 +193,9 @@ def update_stock(ctx, out, doc=None):
 		and out.warehouse
 		and out.stock_qty > 0
 	):
+		if doc and isinstance(doc, dict):
+			doc = frappe._dict(doc)
+
 		kwargs = frappe._dict(
 			{
 				"item_code": ctx.item_code,
@@ -213,7 +216,7 @@ def update_stock(ctx, out, doc=None):
 
 			for batch_no, batch_qty in batches.items():
 				rate = get_batch_based_item_price(
-					{"price_list": doc.selling_price_list, "uom": out.uom, "batch_no": batch_no},
+					{"price_list": doc.get("selling_price_list"), "uom": out.uom, "batch_no": batch_no},
 					out.item_code,
 				)
 				if batch_qty >= qty:
