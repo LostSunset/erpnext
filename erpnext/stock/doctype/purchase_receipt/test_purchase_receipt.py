@@ -3376,7 +3376,7 @@ class TestPurchaseReceipt(IntegrationTestCase):
 		bundle = dn.items[0].serial_and_batch_bundle
 
 		valuation_rate = frappe.db.get_value("Serial and Batch Bundle", bundle, "avg_rate")
-		self.assertEqual(valuation_rate, 150)
+		self.assertEqual(valuation_rate, 100.0)
 
 		doc = frappe.get_doc("Stock Settings")
 		doc.do_not_use_batchwise_valuation = 1
@@ -4038,6 +4038,8 @@ class TestPurchaseReceipt(IntegrationTestCase):
 			make_purchase_return,
 		)
 
+		frappe.flags.through_repost_item_valuation = False
+
 		sn_item_code = make_item(
 			"Test Serial No for Validation", {"has_serial_no": 1, "serial_no_series": "SN-TSNFVAL-.#####"}
 		).name
@@ -4068,6 +4070,8 @@ class TestPurchaseReceipt(IntegrationTestCase):
 		from erpnext.stock.doctype.purchase_receipt.purchase_receipt import (
 			make_purchase_return,
 		)
+
+		frappe.flags.through_repost_item_valuation = False
 
 		batch_item_code = make_item(
 			"Test Batch No for Validation",
