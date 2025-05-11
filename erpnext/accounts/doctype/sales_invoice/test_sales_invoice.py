@@ -12,6 +12,9 @@ from frappe.utils import add_days, flt, format_date, getdate, nowdate, today
 
 import erpnext
 from erpnext.accounts.doctype.account.test_account import create_account, get_inventory_account
+from erpnext.accounts.doctype.mode_of_payment.test_mode_of_payment import (
+	set_default_account_for_mode_of_payment,
+)
 from erpnext.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
 from erpnext.accounts.doctype.purchase_invoice.purchase_invoice import WarehouseMissingError
 from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import (
@@ -45,6 +48,7 @@ from erpnext.stock.doctype.stock_reconciliation.test_stock_reconciliation import
 )
 from erpnext.stock.get_item_details import get_item_tax_map
 from erpnext.stock.utils import get_incoming_rate, get_stock_balance
+from erpnext.tests.utils import ERPNextTestSuite
 
 
 class UnitTestSalesInvoice(UnitTestCase):
@@ -56,13 +60,18 @@ class UnitTestSalesInvoice(UnitTestCase):
 	pass
 
 
-class TestSalesInvoice(IntegrationTestCase):
+class TestSalesInvoice(ERPNextTestSuite):
 	def setUp(self):
 		from erpnext.stock.doctype.stock_ledger_entry.test_stock_ledger_entry import create_items
 
 		create_items(["_Test Internal Transfer Item"], uoms=[{"uom": "Box", "conversion_factor": 10}])
 		create_internal_parties()
 		setup_accounts()
+		mode_of_payment = frappe.get_doc("Mode of Payment", "Bank Draft")
+		set_default_account_for_mode_of_payment(mode_of_payment, "_Test Company", "_Test Bank - _TC")
+		set_default_account_for_mode_of_payment(
+			mode_of_payment, "_Test Company with perpetual inventory", "_Test Bank - TCP1"
+		)
 		frappe.db.set_single_value("Accounts Settings", "acc_frozen_upto", None)
 
 	def tearDown(self):
@@ -79,6 +88,8 @@ class TestSalesInvoice(IntegrationTestCase):
 	def setUpClass(cls):
 		super().setUpClass()
 		cls.enterClassContext(cls.change_settings("Selling Settings", validate_selling_price=0))
+		cls.make_employees()
+		cls.make_sales_person()
 		unlink_payment_on_cancel_of_invoice()
 
 	@classmethod
@@ -982,10 +993,8 @@ class TestSalesInvoice(IntegrationTestCase):
 		pos.is_pos = 1
 		pos.update_stock = 1
 
-		pos.append(
-			"payments", {"mode_of_payment": "Bank Draft", "account": "_Test Bank - TCP1", "amount": 50}
-		)
-		pos.append("payments", {"mode_of_payment": "Cash", "account": "Cash - TCP1", "amount": 50})
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 50})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 50})
 
 		taxes = get_taxes_and_charges()
 		pos.taxes = []
@@ -1014,10 +1023,8 @@ class TestSalesInvoice(IntegrationTestCase):
 		pos.is_pos = 1
 		pos.pos_profile = pos_profile.name
 
-		pos.append(
-			"payments", {"mode_of_payment": "Bank Draft", "account": "_Test Bank - _TC", "amount": 500}
-		)
-		pos.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 500})
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 500})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 500})
 		pos.insert()
 		pos.submit()
 
@@ -1060,10 +1067,8 @@ class TestSalesInvoice(IntegrationTestCase):
 		pos.is_pos = 1
 		pos.update_stock = 1
 
-		pos.append(
-			"payments", {"mode_of_payment": "Bank Draft", "account": "_Test Bank - TCP1", "amount": 50}
-		)
-		pos.append("payments", {"mode_of_payment": "Cash", "account": "Cash - TCP1", "amount": 60})
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 50})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 60})
 
 		pos.write_off_outstanding_amount_automatically = 1
 		pos.insert()
@@ -1103,10 +1108,8 @@ class TestSalesInvoice(IntegrationTestCase):
 		pos.is_pos = 1
 		pos.update_stock = 1
 
-		pos.append(
-			"payments", {"mode_of_payment": "Bank Draft", "account": "_Test Bank - TCP1", "amount": 50}
-		)
-		pos.append("payments", {"mode_of_payment": "Cash", "account": "Cash - TCP1", "amount": 40})
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 50})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 40})
 
 		pos.write_off_outstanding_amount_automatically = 1
 		pos.insert()
@@ -1120,7 +1123,7 @@ class TestSalesInvoice(IntegrationTestCase):
 
 		pos = create_sales_invoice(do_not_save=True)
 		pos.is_pos = 1
-		pos.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 100})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 100})
 		pos.save().submit()
 		self.assertEqual(pos.outstanding_amount, 0.0)
 		self.assertEqual(pos.status, "Paid")
@@ -1191,10 +1194,8 @@ class TestSalesInvoice(IntegrationTestCase):
 		for tax in taxes:
 			pos.append("taxes", tax)
 
-		pos.append(
-			"payments", {"mode_of_payment": "Bank Draft", "account": "_Test Bank - TCP1", "amount": 50}
-		)
-		pos.append("payments", {"mode_of_payment": "Cash", "account": "Cash - TCP1", "amount": 60})
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 50})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 60})
 
 		pos.insert()
 		pos.submit()
@@ -3963,10 +3964,8 @@ class TestSalesInvoice(IntegrationTestCase):
 		pos = create_sales_invoice(qty=10, do_not_save=True)
 		pos.is_pos = 1
 		pos.pos_profile = pos_profile.name
-		pos.append(
-			"payments", {"mode_of_payment": "Bank Draft", "account": "_Test Bank - _TC", "amount": 500}
-		)
-		pos.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 500})
+		pos.append("payments", {"mode_of_payment": "Bank Draft", "amount": 500})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 500})
 		pos.save().submit()
 
 		pos_return = make_sales_return(pos.name)
@@ -4337,7 +4336,7 @@ class TestSalesInvoice(IntegrationTestCase):
 		pos.is_pos = 1
 		pos.pos_profile = pos_profile.name
 		pos.debit_to = "_Test Receivable USD - _TC"
-		pos.append("payments", {"mode_of_payment": "Cash", "account": "_Test Bank - _TC", "amount": 20.35})
+		pos.append("payments", {"mode_of_payment": "Cash", "amount": 20.35})
 		pos.save().submit()
 
 		pos_return = make_sales_return(pos.name)
@@ -4404,7 +4403,7 @@ class TestSalesInvoice(IntegrationTestCase):
 			pos.pos_profile = pos_profile.name
 			pos.is_created_using_pos = 1
 
-			pos.append("payments", {"mode_of_payment": "Cash", "account": "Cash - _TC", "amount": 1000})
+			pos.append("payments", {"mode_of_payment": "Cash", "amount": 1000})
 			self.assertRaises(frappe.ValidationError, pos.insert)
 
 
