@@ -57,8 +57,7 @@ class ReceivablePayableReport:
 		self.ranges = [num.strip() for num in self.filters.range.split(",") if num.strip().isdigit()]
 		self.range_numbers = [num for num in range(1, len(self.ranges) + 2)]
 		self.ple_fetch_method = (
-			frappe.db.get_single_value("Accounts Settings", "receivable_payable_fetch_method")
-			or "Buffered Cursor"
+			frappe.get_settings("Accounts Settings", "receivable_payable_fetch_method") or "Buffered Cursor"
 		)  # Fail Safe
 
 	def run(self, args):
@@ -98,9 +97,6 @@ class ReceivablePayableReport:
 	def get_data(self):
 		self.get_sales_invoices_or_customers_based_on_sales_person()
 
-		# Build delivery note map against all sales invoices
-		self.build_delivery_note_map()
-
 		# Get invoice details like bill_no, due_date etc for all invoices
 		self.get_invoice_details()
 
@@ -108,7 +104,8 @@ class ReceivablePayableReport:
 		self.get_future_payments()
 
 		# Get return entries
-		self.get_return_entries()
+		if not self.filters.party_type or self.filters.party_type in ["Customer", "Supplier"]:
+			self.get_return_entries()
 
 		# Get Exchange Rate Revaluations
 		self.get_exchange_rate_revaluations()
@@ -121,6 +118,9 @@ class ReceivablePayableReport:
 			self.fetch_ple_in_buffered_cursor()
 		elif self.ple_fetch_method == "UnBuffered Cursor":
 			self.fetch_ple_in_unbuffered_cursor()
+
+		# Build delivery note map against all sales invoices
+		self.build_delivery_note_map()
 
 		self.build_data()
 
@@ -848,7 +848,7 @@ class ReceivablePayableReport:
 		)
 
 		if self.filters.get("show_remarks"):
-			if remarks_length := frappe.db.get_single_value(
+			if remarks_length := frappe.get_settings(
 				"Accounts Settings", "receivable_payable_remarks_length"
 			):
 				query = query.select(Substring(ple.remarks, 1, remarks_length).as_("remarks"))
