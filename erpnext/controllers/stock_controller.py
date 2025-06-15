@@ -81,14 +81,25 @@ class StockController(AccountsController):
 				)
 
 	def check_zero_rate(self):
-		for item in self.get("items"):
-			if not item.get("base_rate") and not item.get("allow_zero_valuation_rate"):
-				frappe.toast(
-					_(
-						"Row #{0}: Item {1} has zero rate but 'Allow Zero Valuation Rate' is not enabled."
-					).format(item.idx, frappe.bold(item.item_code)),
-					indicator="orange",
-				)
+		if self.doctype in [
+			"POS Invoice",
+			"Purchase Invoice",
+			"Sales Invoice",
+			"Delivery Note",
+			"Purchase Receipt",
+			"Stock Entry",
+			"Stock Reconciliation",
+		]:
+			for item in self.get("items"):
+				if (item.get("valuation_rate") == 0 or item.get("incoming_rate") == 0) and item.get(
+					"allow_zero_valuation_rate"
+				) == 0:
+					frappe.toast(
+						_(
+							"Row #{0}: Item {1} has zero rate but 'Allow Zero Valuation Rate' is not enabled."
+						).format(item.idx, frappe.bold(item.item_code)),
+						indicator="orange",
+					)
 
 	def validate_items_exist(self):
 		if not self.get("items"):
@@ -518,7 +529,7 @@ class StockController(AccountsController):
 			)
 
 	def set_use_serial_batch_fields(self):
-		if frappe.get_settings("Stock Settings", "use_serial_batch_fields"):
+		if frappe.get_single_value("Stock Settings", "use_serial_batch_fields"):
 			for row in self.items:
 				row.use_serial_batch_fields = 1
 
@@ -1076,7 +1087,7 @@ class StockController(AccountsController):
 			"Purchase Invoice",
 			"Sales Invoice",
 			"Delivery Note",
-		] and frappe.get_settings(
+		] and frappe.get_single_value(
 			"Stock Settings", "allow_to_make_quality_inspection_after_purchase_or_delivery"
 		):
 			return
@@ -1092,7 +1103,7 @@ class StockController(AccountsController):
 
 	def validate_qi_submission(self, row):
 		"""Check if QI is submitted on row level, during submission"""
-		action = frappe.get_settings("Stock Settings", "action_if_quality_inspection_is_not_submitted")
+		action = frappe.get_single_value("Stock Settings", "action_if_quality_inspection_is_not_submitted")
 		qa_docstatus = frappe.db.get_value("Quality Inspection", row.quality_inspection, "docstatus")
 
 		if qa_docstatus != 1:
@@ -1107,7 +1118,7 @@ class StockController(AccountsController):
 
 	def validate_qi_rejection(self, row):
 		"""Check if QI is rejected on row level, during submission"""
-		action = frappe.get_settings("Stock Settings", "action_if_quality_inspection_is_rejected")
+		action = frappe.get_single_value("Stock Settings", "action_if_quality_inspection_is_rejected")
 		qa_status = frappe.db.get_value("Quality Inspection", row.quality_inspection, "status")
 
 		if qa_status == "Rejected":
@@ -1206,7 +1217,7 @@ class StockController(AccountsController):
 		item_wise_received_qty = self.get_item_wise_inter_received_qty()
 		precision = frappe.get_precision(self.doctype + " Item", "qty")
 
-		over_receipt_allowance = frappe.get_settings("Stock Settings", "over_delivery_receipt_allowance")
+		over_receipt_allowance = frappe.get_single_value("Stock Settings", "over_delivery_receipt_allowance")
 
 		parent_doctype = {
 			"Purchase Receipt": "Delivery Note",
@@ -1379,7 +1390,7 @@ class StockController(AccountsController):
 			force = True
 
 		if force or future_sle_exists(args) or repost_required_for_queue(self):
-			item_based_reposting = frappe.get_settings("Stock Reposting Settings", "item_based_reposting")
+			item_based_reposting = frappe.get_single_value("Stock Reposting Settings", "item_based_reposting")
 			if item_based_reposting:
 				create_item_wise_repost_entries(
 					voucher_type=self.doctype,
@@ -1433,7 +1444,7 @@ class StockController(AccountsController):
 @frappe.whitelist()
 def show_accounting_ledger_preview(company, doctype, docname):
 	filters = frappe._dict(company=company, include_dimensions=1)
-	doc = frappe.get_doc(doctype, docname)
+	doc = frappe.get_lazy_doc(doctype, docname)
 	doc.run_method("before_gl_preview")
 
 	gl_columns, gl_data = get_accounting_ledger_preview(doc, filters)
@@ -1446,7 +1457,7 @@ def show_accounting_ledger_preview(company, doctype, docname):
 @frappe.whitelist()
 def show_stock_ledger_preview(company, doctype, docname):
 	filters = frappe._dict(company=company)
-	doc = frappe.get_doc(doctype, docname)
+	doc = frappe.get_lazy_doc(doctype, docname)
 	doc.run_method("before_sl_preview")
 
 	sl_columns, sl_data = get_stock_ledger_preview(doc, filters)
@@ -1671,7 +1682,7 @@ def is_reposting_pending():
 def future_sle_exists(args, sl_entries=None, allow_force_reposting=True):
 	from erpnext.stock.utils import get_combine_datetime
 
-	if allow_force_reposting and frappe.get_settings(
+	if allow_force_reposting and frappe.get_single_value(
 		"Stock Reposting Settings", "do_reposting_for_each_stock_transaction"
 	):
 		return True

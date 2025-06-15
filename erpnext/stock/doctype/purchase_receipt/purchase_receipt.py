@@ -365,7 +365,7 @@ class PurchaseReceipt(BuyingController):
 		super().on_submit()
 
 		# Check for Approving Authority
-		frappe.get_doc("Authorization Control").validate_approving_authority(
+		frappe.get_cached_doc("Authorization Control").validate_approving_authority(
 			self.doctype, self.company, self.base_grand_total
 		)
 
@@ -942,7 +942,7 @@ class PurchaseReceipt(BuyingController):
 			updated_pr += update_billed_amount_based_on_po(po_details, update_modified, self)
 
 		for pr in set(updated_pr):
-			pr_doc = self if (pr == self.name) else frappe.get_doc("Purchase Receipt", pr)
+			pr_doc = self if (pr == self.name) else frappe.get_lazy_doc("Purchase Receipt", pr)
 			update_billing_percentage(pr_doc, update_modified=update_modified)
 
 	def reserve_stock(self):
@@ -952,8 +952,8 @@ class PurchaseReceipt(BuyingController):
 	def reserve_stock_for_sales_order(self):
 		if (
 			self.is_return
-			or not frappe.get_settings("Stock Settings", "enable_stock_reservation")
-			or not frappe.get_settings("Stock Settings", "auto_reserve_stock_for_sales_order_on_purchase")
+			or not frappe.get_single_value("Stock Settings", "enable_stock_reservation")
+			or not frappe.get_single_value("Stock Settings", "auto_reserve_stock_for_sales_order_on_purchase")
 		):
 			return
 
@@ -980,7 +980,7 @@ class PurchaseReceipt(BuyingController):
 				)
 
 			for so, items_details in so_items_details_map.items():
-				so_doc = frappe.get_doc("Sales Order", so)
+				so_doc = frappe.get_lazy_doc("Sales Order", so)
 				so_doc.create_stock_reservation_entries(
 					items_details=items_details,
 					from_voucher_type="Purchase Receipt",
@@ -988,7 +988,7 @@ class PurchaseReceipt(BuyingController):
 				)
 
 	def reserve_stock_for_production_plan(self):
-		if self.is_return or not frappe.get_settings("Stock Settings", "enable_stock_reservation"):
+		if self.is_return or not frappe.get_single_value("Stock Settings", "enable_stock_reservation"):
 			return
 
 		production_plan_references = self.get_production_plan_references()
@@ -1199,7 +1199,7 @@ def get_billed_amount_against_po(po_items):
 def update_billing_percentage(pr_doc, update_modified=True, adjust_incoming_rate=False):
 	# Update Billing % based on pending accepted qty
 	buying_settings = frappe.get_single("Buying Settings")
-	over_billing_allowance = frappe.get_settings("Accounts Settings", "over_billing_allowance")
+	over_billing_allowance = frappe.get_single_value("Accounts Settings", "over_billing_allowance")
 
 	total_amount, total_billed_amount = 0, 0
 	item_wise_returned_qty = get_item_wise_returned_qty(pr_doc)
@@ -1463,7 +1463,7 @@ def make_purchase_return(source_name, target_doc=None):
 
 @frappe.whitelist()
 def update_purchase_receipt_status(docname, status):
-	pr = frappe.get_doc("Purchase Receipt", docname)
+	pr = frappe.get_lazy_doc("Purchase Receipt", docname)
 	pr.update_status(status)
 
 

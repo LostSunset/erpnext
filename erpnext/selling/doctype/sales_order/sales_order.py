@@ -195,7 +195,7 @@ class SalesOrder(SellingController):
 	def onload(self) -> None:
 		super().onload()
 
-		if frappe.get_settings("Stock Settings", "enable_stock_reservation"):
+		if frappe.get_single_value("Stock Settings", "enable_stock_reservation"):
 			if self.has_unreserved_stock():
 				self.set_onload("has_unreserved_stock", True)
 
@@ -246,14 +246,14 @@ class SalesOrder(SellingController):
 		self.enable_auto_reserve_stock()
 
 	def enable_auto_reserve_stock(self):
-		if self.is_new() and frappe.get_settings("Stock Settings", "auto_reserve_stock"):
+		if self.is_new() and frappe.get_single_value("Stock Settings", "auto_reserve_stock"):
 			self.reserve_stock = 1
 
 	def set_has_unit_price_items(self):
 		"""
 		If permitted in settings and any item has 0 qty, the SO has unit price items.
 		"""
-		if not frappe.get_settings("Selling Settings", "allow_zero_qty_in_sales_order"):
+		if not frappe.get_single_value("Selling Settings", "allow_zero_qty_in_sales_order"):
 			return
 
 		self.has_unit_price_items = any(
@@ -279,7 +279,9 @@ class SalesOrder(SellingController):
 				(self.po_no, self.name, self.customer),
 			)
 			if so and so[0][0]:
-				if cint(frappe.get_settings("Selling Settings", "allow_against_multiple_purchase_orders")):
+				if cint(
+					frappe.get_single_value("Selling Settings", "allow_against_multiple_purchase_orders")
+				):
 					frappe.msgprint(
 						_(
 							"Warning: Sales Order {0} already exists against Customer's Purchase Order {1}"
@@ -403,7 +405,7 @@ class SalesOrder(SellingController):
 			}
 		)
 
-		if cint(frappe.get_settings("Selling Settings", "maintain_same_sales_rate")):
+		if cint(frappe.get_single_value("Selling Settings", "maintain_same_sales_rate")):
 			self.validate_rate_with_reference_doc([["Quotation", "prevdoc_docname", "quotation_item"]])
 
 	def update_enquiry_status(self, prevdoc, flag):
@@ -433,7 +435,7 @@ class SalesOrder(SellingController):
 		self.check_credit_limit()
 		self.update_reserved_qty()
 
-		frappe.get_doc("Authorization Control").validate_approving_authority(
+		frappe.get_cached_doc("Authorization Control").validate_approving_authority(
 			self.doctype, self.company, self.base_grand_total, self
 		)
 		self.update_project()
@@ -481,11 +483,11 @@ class SalesOrder(SellingController):
 			update_coupon_code_count(self.coupon_code, "cancelled")
 
 	def update_project(self):
-		if frappe.get_settings("Selling Settings", "sales_update_frequency") != "Each Transaction":
+		if frappe.get_single_value("Selling Settings", "sales_update_frequency") != "Each Transaction":
 			return
 
 		if self.project:
-			project = frappe.get_doc("Project", self.project)
+			project = frappe.get_lazy_doc("Project", self.project)
 			project.update_sales_amount()
 			project.db_update()
 
@@ -631,7 +633,7 @@ class SalesOrder(SellingController):
 		if total_picked_qty and total_qty:
 			per_picked = total_picked_qty / total_qty * 100
 
-			pick_percentage = frappe.get_settings("Stock Settings", "over_picking_allowance")
+			pick_percentage = frappe.get_single_value("Stock Settings", "over_picking_allowance")
 			if pick_percentage:
 				total_qty += flt(total_qty) * (pick_percentage / 100)
 
@@ -727,7 +729,7 @@ class SalesOrder(SellingController):
 	def validate_reserved_stock(self):
 		"""Clean reserved stock flag for non-stock Item"""
 
-		enable_stock_reservation = frappe.get_settings("Stock Settings", "enable_stock_reservation")
+		enable_stock_reservation = frappe.get_single_value("Stock Settings", "enable_stock_reservation")
 
 		for item in self.items:
 			if item.reserve_stock and (not enable_stock_reservation or not cint(item.is_stock_item)):
@@ -813,7 +815,7 @@ def get_list_context(context=None):
 
 @frappe.whitelist()
 def is_enable_cutoff_date_on_bulk_delivery_note_creation():
-	return frappe.get_settings("Selling Settings", "enable_cutoff_date_on_bulk_delivery_note_creation")
+	return frappe.get_single_value("Selling Settings", "enable_cutoff_date_on_bulk_delivery_note_creation")
 
 
 @frappe.whitelist()
@@ -823,7 +825,7 @@ def close_or_unclose_sales_orders(names, status):
 
 	names = json.loads(names)
 	for name in names:
-		so = frappe.get_doc("Sales Order", name)
+		so = frappe.get_lazy_doc("Sales Order", name)
 		if so.docstatus == 1:
 			if status == "Closed":
 				if so.status not in ("Cancelled", "Closed") and (
@@ -1218,7 +1220,7 @@ def make_sales_invoice(source_name, target_doc=None, ignore_permissions=False):
 	)
 
 	automatically_fetch_payment_terms = cint(
-		frappe.get_settings("Accounts Settings", "automatically_fetch_payment_terms")
+		frappe.get_single_value("Accounts Settings", "automatically_fetch_payment_terms")
 	)
 	if automatically_fetch_payment_terms:
 		doclist.set_payment_schedule()
@@ -1661,6 +1663,11 @@ def make_raw_material_request(items, company, sales_order, project=None):
 
 	items.update({"company": company, "sales_order": sales_order})
 
+	item_wh = {}
+	for item in items.get("items"):
+		if item.get("warehouse"):
+			item_wh[item.get("item_code")] = item.get("warehouse")
+
 	raw_materials = get_items_for_material_requests(items)
 	if not raw_materials:
 		frappe.msgprint(_("Material Request not created, as quantity for Raw Materials already available."))
@@ -1685,7 +1692,7 @@ def make_raw_material_request(items, company, sales_order, project=None):
 				"item_code": item.get("item_code"),
 				"qty": item.get("quantity"),
 				"schedule_date": schedule_date,
-				"warehouse": item.get("warehouse"),
+				"warehouse": item_wh.get(item.get("main_bom_item")) or item.get("warehouse"),
 				"sales_order": sales_order,
 				"project": project,
 			},
@@ -1859,4 +1866,4 @@ def get_work_order_items(sales_order, for_raw_material_request=0):
 
 @frappe.whitelist()
 def get_stock_reservation_status():
-	return frappe.get_settings("Stock Settings", "enable_stock_reservation")
+	return frappe.get_single_value("Stock Settings", "enable_stock_reservation")

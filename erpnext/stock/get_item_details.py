@@ -136,7 +136,7 @@ def get_item_details(
 	out.update(data)
 
 	if (
-		frappe.get_settings("Stock Settings", "auto_create_serial_and_batch_bundle_for_outward")
+		frappe.get_single_value("Stock Settings", "auto_create_serial_and_batch_bundle_for_outward")
 		and not ctx.get("serial_and_batch_bundle")
 		and (ctx.get("use_serial_batch_fields") or ctx.get("doctype") == "POS Invoice")
 	):
@@ -201,7 +201,7 @@ def update_stock(ctx, out, doc=None):
 			{
 				"item_code": ctx.item_code,
 				"warehouse": ctx.warehouse,
-				"based_on": frappe.get_settings("Stock Settings", "pick_serial_and_batch_based_on"),
+				"based_on": frappe.get_single_value("Stock Settings", "pick_serial_and_batch_based_on"),
 			}
 		)
 
@@ -591,7 +591,7 @@ def get_item_warehouse_(ctx: ItemDetailsCtx, item, overwrite_warehouse, defaults
 		warehouse = ctx.warehouse
 
 	if not warehouse:
-		default_warehouse = frappe.get_settings("Stock Settings", "default_warehouse")
+		default_warehouse = frappe.get_single_value("Stock Settings", "default_warehouse")
 		if frappe.db.get_value("Warehouse", default_warehouse, "company") == ctx.company:
 			return default_warehouse
 
@@ -672,8 +672,9 @@ def get_item_tax_info(doc, tax_category, item_codes, item_rates=None, item_tax_t
 	return out
 
 
+@frappe.whitelist()
 @erpnext.normalize_ctx_input(ItemDetailsCtx)
-def get_item_tax_template(ctx: ItemDetailsCtx, item, out: ItemDetails):
+def get_item_tax_template(ctx: ItemDetailsCtx, item=None, out: ItemDetails | None = None):
 	"""
 	Determines item_tax template from item or parent item groups.
 
@@ -691,6 +692,12 @@ def get_item_tax_template(ctx: ItemDetailsCtx, item, out: ItemDetails):
 	        "base_net_rate": float
 	        }
 	"""
+	if not item:
+		if not ctx.get("item_code"):
+			frappe.throw(_("Item/Item Code required to get Item Tax Template."))
+		else:
+			item = frappe.get_cached_doc("Item", ctx.item_code)
+
 	item_tax_template = None
 	if item.taxes:
 		item_tax_template = _get_item_tax_template(ctx, item.taxes, out)
@@ -702,8 +709,10 @@ def get_item_tax_template(ctx: ItemDetailsCtx, item, out: ItemDetails):
 			item_tax_template = _get_item_tax_template(ctx, item_group_doc.taxes, out)
 			item_group = item_group_doc.parent_item_group
 
-	if ctx.get("child_doctype") and item_tax_template:
+	if out and ctx.get("child_doctype") and item_tax_template:
 		out.update(get_fetch_values(ctx.get("child_doctype"), "item_tax_template", item_tax_template))
+
+	return item_tax_template
 
 
 @erpnext.normalize_ctx_input(ItemDetailsCtx)

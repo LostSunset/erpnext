@@ -44,23 +44,22 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 
 			if (item.item_code && item.rate) {
 				frappe.call({
-					method: "frappe.client.get_value",
+					method: "erpnext.stock.get_item_details.get_item_tax_template",
 					args: {
-						doctype: "Item Tax",
-						parent: "Item",
-						filters: {
-							parent: item.item_code,
-							minimum_net_rate: ["<=", item.rate],
-							maximum_net_rate: [">=", item.rate]
-						},
-						fieldname: "item_tax_template"
+						ctx: {
+							item_code: item.item_code,
+							company: frm.doc.company,
+							base_net_rate: item.base_net_rate,
+							tax_category: frm.doc.tax_category,
+							item_tax_template: item.item_tax_template,
+							posting_date: frm.doc.posting_date,
+							bill_date: frm.doc.bill_date,
+							transaction_date: frm.doc.transaction_date,
+						}
 					},
 					callback: function(r) {
-						const tax_rule = r.message;
-
-						let matched_template = tax_rule ? tax_rule.item_tax_template : null;
-
-						frappe.model.set_value(cdt, cdn, 'item_tax_template', matched_template);
+						const item_tax_template = r.message;
+						frappe.model.set_value(cdt, cdn, 'item_tax_template', item_tax_template);
 					}
 				});
 			}
@@ -875,6 +874,33 @@ erpnext.TransactionController = class TransactionController extends erpnext.taxe
 
 	async validate() {
 		await this.calculate_taxes_and_totals(false);
+		await this.confirm_posting_date_change()
+	}
+
+	async confirm_posting_date_change() {
+		if (!frappe.meta.has_field(this.frm.doc.doctype, "set_posting_time")) return;
+		if (this.frm.doc.set_posting_time) return;
+		if (frappe.datetime.get_today() == this.frm.doc.posting_date) return;
+
+		let is_confirmation_reqd = await frappe.db.get_single_value(
+			'Accounts Settings', 'confirm_before_resetting_posting_date'
+		)
+
+		if (!is_confirmation_reqd) return;
+
+		return new Promise((resolve, reject) => {
+			frappe.confirm(
+				__(
+					"Posting Date will change to today's date as Edit Posting Date and Time is unchecked. Are you sure want to proceed?"
+				),
+				() => {
+					this.frm.doc.posting_date = frappe.datetime.get_today();
+					this.frm.refresh_field("posting_date");
+					resolve();
+				},
+				() => reject()
+			);
+		});
 	}
 
 	update_stock() {
